@@ -1,0 +1,66 @@
+name: Build R for Windows
+
+on:
+  push:
+    branches:
+      - trunk
+  pull_request:
+    branches:
+      - trunk
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+
+    - name: Checkout Code
+      uses: actions/checkout@v2
+      with:
+        submodules: true
+
+    - name: Checkout UCRT3 Rtools
+      uses: kalibera/ucrt3/actions/toolchain-install@main
+      with:
+        toolchain-type: full
+        
+        
+    - name: Download OpenBLAS
+      run: |
+        curl -L -o openblas.zip https://github.com/xianyi/OpenBLAS/releases/download/v0.3.13/OpenBLAS-0.3.13-Win64-int64.zip
+        unzip openblas.zip
+        mv OpenBLAS-0.3.13-Win64-int64 openblas
+
+    - name: Download LAPACK
+      run: |
+        curl -L -o lapack.zip http://icl.cs.utk.edu/projectsfiles/lapack-for-windows/libraries/VisualStudio/3.8.0/Dynamic/Win64/liblapack.zip
+        unzip lapack.zip -d lapack
+
+    - name: Download InnoSetup
+      run: |
+        choco install innosetup
+        
+    - name: Download MikTex
+      run: |
+        choco install innosetup
+
+    - name: Compile R
+      run: |
+        set OPENBLAS=%cd%\openblas
+        set LAPACK=%cd%\lapack
+        echo 'MAIN_LD=$(BLAS_LIBS) $(LAPACK_LIBS)' > src/gnuwin32/Front-End.mk
+        echo 'include $(R_HOME)/etc$(R_ARCH)/Makeconf' >> src/gnuwin32/Front-End.mk
+        cd src/gnuwin32
+        bash --init-file "$(pwd)/base/etc/bashrc" -i -c "make"
+
+    - name: Create Installer
+      run: |
+        cd src/gnuwin32
+        ./build-R-installer.bat
+        cp R-*-Win.exe ../../R_installer.exe
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: installer
+        path: R_installer.exe
