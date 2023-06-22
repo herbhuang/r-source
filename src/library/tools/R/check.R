@@ -1312,7 +1312,7 @@ add_dummies <- function(dir, Log)
                         "in the 'Writing R Extensions' manual.\n")
             } else {
                 for (f in c("configure", "cleanup")) {
-                    ## /bin/bash is not portable
+                    ## /bin/bash is not portable
                     if (file.exists(f) &&
                         any(grepl("^#! */bin/bash",
                                   readLines(f, 1L, warn = FALSE)))) {
@@ -2283,7 +2283,8 @@ add_dummies <- function(dir, Log)
         if (dir.exists("man") && !extra_arch) {
             checkingLog(Log, "Rd files")
             t1 <- proc.time()
-            minlevel <- Sys.getenv("_R_CHECK_RD_CHECKRD_MINLEVEL_", "-1")
+            minlevel <- if (is_base_pkg) -Inf else
+                as.numeric(Sys.getenv("_R_CHECK_RD_CHECKRD_MINLEVEL_", "-1"))
             Rcmd <- paste(opWarn_string, "\n",
                           sprintf("tools:::.check_package_parseRd('.', minlevel=%s)\n", minlevel))
             ## This now evaluates \Sexpr, so run with usual packages.
@@ -2295,6 +2296,7 @@ add_dummies <- function(dir, Log)
             if (length(out)) {
                 if(length(grep(paste("^prepare.*Dropping empty section",
                                      "^checkRd: \\(-",
+                                     "^  ", # continuation lines
                                      sep = "|"),
                                out, invert = TRUE)))
                     warningLog(Log)
@@ -3589,7 +3591,8 @@ add_dummies <- function(dir, Log)
                 except <- unlist(strsplit(except, "\\s", perl = TRUE))
                 warns <- setdiff(warns,
                                  c(except, "-Wall", "-Wextra", "-Weverything",
-                                   "-Wno-dev", "-Wstrict-prototypes"))
+                                   "-Wno-dev", "-Wstrict-prototypes",
+                                   "-Wno-strict-prototypes"))
                 warns <- warns[!startsWith(warns, "-Wl,")] # linker flags
                 diags <- grep(" -fno-diagnostics-show-option", tokens,
                               useBytes = TRUE, value = TRUE)
@@ -3773,7 +3776,7 @@ add_dummies <- function(dir, Log)
                         opWarn_string, pkgname)
             env2 <- Sys.getenv("_R_LOAD_CHECK_S4_EXPORTS_", "NA")
             env2 <- paste0("_R_LOAD_CHECK_S4_EXPORTS_=",
-                           if(env2 == "all") env else pkgname)
+                           if(env2 == "all") env2 else pkgname)
             t1 <- proc.time()
             out <- R_runR0(Rcmd, opts, c(env, env1, env2), arch = arch)
             t2 <- proc.time()
@@ -3958,7 +3961,16 @@ add_dummies <- function(dir, Log)
             ##       enc <- ""
             ##       any <- TRUE
             ##   }
-            Ropts <- if (nzchar(arch)) R_opts3 else R_opts
+            cprof <- Sys.getenv("_R_CHECK_EXAMPLES_PROFILE_", "")
+            cprof <- if(!file.exists(cprof)) "" else normalizePath(cprof)
+            Ropts <- if(nzchar(cprof)) {
+                         if(nzchar(arch)) {
+                             ## R_opts3 without --no-init-file
+                             "--no-site-file --no-save --no-restore"
+                         } else
+                             ## R_opts without --no-init-file
+                             "--no-site-file --no-save --no-restore --no-environ"
+                     } else if(nzchar(arch)) R_opts3 else R_opts
             if (use_valgrind) Ropts <- paste(Ropts, "-d valgrind")
             t1 <- proc.time()
             tlim <- get_timeout(Sys.getenv("_R_CHECK_EXAMPLES_ELAPSED_TIMEOUT_",
@@ -3968,7 +3980,9 @@ add_dummies <- function(dir, Log)
             status <- R_runR0(NULL, c(Ropts, enc),
                               c("LANGUAGE=en", "_R_CHECK_INTERNALS2_=1",
                                 if(nzchar(arch)) env0, jitstr,
-                                if(R_cdo_examples) elibs_cdo else elibs),
+                                if(R_cdo_examples) elibs_cdo else elibs,
+                                if(nzchar(cprof))
+                                    paste0("R_PROFILE_USER=", cprof)),
                               stdout = exout, stderr = exout,
                               stdin = exfile, arch = arch, timeout = tlim)
             t2 <- proc.time()
@@ -6065,14 +6079,36 @@ add_dummies <- function(dir, Log)
                            .pretty_format(sort(bad)))
                 noteLog(Log, msg)
             }
+
+            ## Look for S4 exports when 'methods' is not a strong dependency:
+            ## - loadNamespace() silently ignores S4 export directives when
+            ##   there is no S4 metadata; seen: exportClass(<S3 class>)
+            ## - 'Suggests: methods' is not sufficient to ensure that S4 exports
+            ##   are processed when loading under R_DEFAULT_PACKAGES=NULL
+            pi <- .split_description(.read_description(file.path(pkgdir, "DESCRIPTION")))
+            dependsMethods <- "methods" %in% c(names(pi$Depends), names(pi$Imports))
+            if (!dependsMethods &&
+                length(bad <- Filter(length, ns[c("exportClasses",
+                                                  "exportMethods",
+                                                  "exportClassPatterns")]))) {
+                OK <- FALSE
+                noteLog(Log, ngettext(length(bad),
+                    "Found export directive that requires package 'methods':",
+                    "Found export directives that require package 'methods':",
+                    domain = NA))
+                printLog0(Log, paste0(.pretty_format(names(bad)), collapse = "\n"), "\n")
+                wrapLog("Remove all such namespace directives (if obsolete)",
+                        "or ensure that the DESCRIPTION Depends or Imports",
+                        "field contains 'methods'.")
+            }
+
+            ## Check for missing R version requirement
             nS3methods <- nrow(ns$S3methods)
             if (nS3methods > 500L) {
                 ## check that this is installable in R 3.0.1
-                meta <- .read_description(file.path(pkgdir, "DESCRIPTION"))
-                deps <- .split_description(meta, verbose = TRUE)$Rdepends2
                 status <- 0L
                 current <- as.numeric_version("3.0.1")
-                for(depends in deps) {
+                for(depends in pi$Rdepends2) {
                     ## .check_package_description will insist on these operators
                     if(depends$op %notin% c("<=", ">=", "<", ">", "==", "!="))
                         next
@@ -6890,8 +6926,12 @@ add_dummies <- function(dir, Log)
 
         messageLog(Log, "using log directory ", sQuote(pkgoutdir))
         messageLog(Log, "using ", R.version.string)
-        messageLog(Log, "using platform: ", R.version$platform,
-                   " (", 8*.Machine$sizeof.pointer, "-bit)")
+        sp <- 8*.Machine$sizeof.pointer
+        if (sp != 64)
+            messageLog(Log, "using platform: ", R.version$platform,
+                       " (", sp, "-bit)")
+        else
+            messageLog(Log, "using platform: ", R.version$platform)
         vers <- R_compiled_by()
         if (any(nzchar(vers))) {
             messageLog(Log, "R was compiled by")

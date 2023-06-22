@@ -425,7 +425,8 @@ invisible(lapply(11:120, function(n) showC(n, 1030 %/% n)))
 
 ## download.file() with invalid option -- PR#18455
 op <- options(download.file.method = "no way")
-Edl <- tryCid(download.file("http://httpbin.org/get", "ping.txt"))
+# website does not matter as will not be contacted.
+Edl <- tryCid(download.file("http://cran.r-project.org/", "ping.txt"))
 stopifnot(inherits(Edl, "error"),
           !englishMsgs || grepl("should be one of .auto.,", conditionMessage(Edl)))
 options(op)
@@ -550,6 +551,122 @@ if(no.splines) unloadNamespace("splines")
 ## ns() gave  Error in qr.default(t(const)) : NA/NaN/Inf in foreign function call
 
 
+## Krylov's issue with sum(), min(), etc on R-devel: Now errors instead of silently computing:
+mT <- tryCid( sum(3,4,na.rm=5, 6, NA, 8, na.rm=TRUE) )
+mF <- tryCid( min(3,4,na.rm=5, 6, NA, 8, na.rm=FALSE) )
+stopifnot(inherits(mT, "error"),
+          inherits(mF, "error"), all.equal(mT, mF))
+if(englishMsgs)
+    stopifnot(grepl("formal argument \"na.rm\" matched by multiple", conditionMessage(mT)))
+## these gave numeric (or NA) results without any warning in R <= 4.3.0
+
+
+## as.complex(NA_real_) |-> NA_complex_  as for all other NA, NA_*
+stopifnot(identical(as.complex(NA_real_), NA_complex_))
+## gave  complex(real = NA, imaginary=0) from R 3.3.0  to 4.3.x
+
+
+## methods() in {base} pkg are visible
+mmeths <- methods(merge)
+imeth <- attr(mmeths, "info")
+stopifnot(exprs = {
+    sum(iB <- imeth[,"from"] == "base") >= 2 # 'default' and 'data.frame'
+    imeth[iB, "visible"] # {base} methods *are* visible
+})
+## was wrong in R 4.3.0 (and R-devel for a while)
+
+
+## Methods of a non-generic function
+foo <- function(x) { bar(x) }
+(m <- methods(foo))
+stopifnot(inherits(m, "MethodsFunction"), length(m) == 0L)
+## .S3methods() failed in R-devel for a few days after r84400.
+
+
+## getS3method() error
+myFUN <- function(x) UseMethod("myFUN")
+(msg <- tryCmsg(getS3method("myFUN", "numeric")))
+if(englishMsgs)
+    stopifnot(grepl("S3 method 'myFUN.numeric' not found", msg))
+## failed with "wrong" message after r84400
+
+
+## head(.,n) / tail(.,n) error reporting - PR#18362
+try(head(letters, 1:2)) # had "Error in checkHT(..)"); now ".. in head.default(..)"
+try(tail(letters, NA))
+try(head(letters, "1"))
+tryCcall1 <- function(expr) tryCid(expr)$call[[1L]]
+stopifnot(exprs = {
+    tryCcall1(head(letters, 1:2)) == quote(head.default)
+    tryCcall1(tail(letters, NA )) == quote(tail.default)
+    tryCcall1(head(letters, "1")) == quote(head.default)
+})
+## more helpful error msg
+
+
+## na.contiguous() w/ result at beginning -- Georgi Boshnakov, R-dev, 2023-06-01
+## and does not set "tsp" for non-ts
+x <- c(1:3, NA, NA, 6:8, NA, 10:12)
+(naco <- na.contiguous(      x ))
+(nact <- na.contiguous(as.ts(x)))
+dput( setdiff(attributes(nact), attributes(naco)) ) # and check -- TODO
+n0 <- numeric(0)
+stopifnot(identical(`attributes<-`(naco, NULL), 1:3)
+        , identical(na.contiguous(n0), n0)
+        , is.null(attr(naco, "tsp"))
+        , nact == naco
+        , identical(c(na.contiguous(presidents)), presidents[32:110])
+          )
+## 'naco' gave *2nd*, not *first* run till R 4.3.0
+
+
+## accidental duplicated options() entry
+if(i <- anyDuplicated(no <- names(ops <- options())))
+    stop("duplicated options(): ", no[i])
+## had one in R 4.3.0 (and R-devel)
+
+
+## .S3methods() and methods() in  R 4.3.0
+library(stats)# almost surely unneeded
+##
+methi <- function(...) attr(methods(...), "info")
+(mdensi <- methi(density)) # only density.default
+stopifnot(mdensi["density.default", "visible"]) # FALSE in R 4.3.0
+if(requireNamespace('cluster', lib.loc=.Library, quietly = TRUE)) withAutoprint({
+    try(detach("package:cluster"), silent=TRUE)# just in case
+    (mCf1 <- methi(coef))
+
+    require(cluster)
+    (mCf2 <- methi(coef))
+    stopifnot(mCf2["coef.hclust", "visible"],
+              mCf2["coef.hclust", "from"] == "cluster")
+    ## ... and
+    detach("package:cluster")
+    (mcf <- methods(coef)) # again gets marked as invisible:  coef.hclust*
+    stopifnot(!attr(mcf, "info")["coef.hclust", "visible"])
+}) # when  {cluster}
+## in any case {and "always" worked}:
+coef.foo <- function(object, ...) "the coef.foo() method"
+(m3 <- methi(coef))# -> coef.foo is visible in .GlobalEnv
+stopifnot(m3["coef.foo", "visible"],
+          m3["coef.foo", "from"] == ".GlobalEnv")
+## *and* this is still true, after registering it:
+.S3method("coef", "foo", coef.foo)
+stopifnot(identical(methi(coef), m3)) # did not change
+rm(coef.foo)
+m4 <- methi(coef)
+stopifnot(!m4["coef.foo", "visible"],
+           m4["coef.foo", "from"] == "registered S3method for coef")
+## coef.foo  part  always worked
+
+## R <= 4.3.1 would split into two invalid characters (PR#18546)
+splitmbcs <- length(strsplit("\u00e4", "^", perl=TRUE)[[1]])
+stopifnot(identical(splitmbcs, 1L))
+
+
+## contrib.url() should "recycle0"
+stopifnot(identical(contrib.url(character()), character()))
+## R < 4.4.0 returned "/src/contrib" or similar
 
 
 ## keep at end

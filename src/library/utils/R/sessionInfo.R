@@ -72,12 +72,13 @@
                                       "16" = "Big Sur ...",
                                       ""),
                                ver)
-                   else if(ver1[1L] <= "13")
+                   else if(ver1[1L] <= "14")
                         sprintf("macOS %s %s",
                                switch(ver1[1L],
                                       "11" = "Big Sur",
                                       "12" = "Monterey",
-                                      "13" = "Ventura"),
+                                      "13" = "Ventura",
+                                      "14" = "Sonoma"),
                                ver)
                    else
                        sprintf("macOS %s", ver)
@@ -99,7 +100,8 @@ sessionInfo <- function(package = NULL)
     z$platform <- z$R.version$platform
     if(nzchar(.Platform$r_arch))
         z$platform <- paste(z$platform, .Platform$r_arch, sep = "/")
-    z$platform <- paste0(z$platform, " (", 8*.Machine$sizeof.pointer, "-bit)")
+    sp <- 8*.Machine$sizeof.pointer
+    if (sp != 64) z$platform <- paste0(z$platform, " (", sp, "-bit)")
     z$locale <- Sys.getlocale()
     z$tzone <-Sys.timezone()
     z$tzcode_type <- .Call(C_tzcode_type)

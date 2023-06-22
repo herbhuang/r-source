@@ -6,11 +6,16 @@
 \encoding{UTF-8}
 
 \section{\Rlogo CHANGES IN R-devel}{
-  %% \subsection{SIGNIFICANT USER-VISIBLE CHANGES}{
-  %%   \itemize{
-  %%     \item .
-  %%   }
-  %% }
+  \subsection{SIGNIFICANT USER-VISIBLE CHANGES}{
+    \itemize{
+      \item Startup banners, \command{R --version}, \code{sessionInfo()}
+      and \command{R CMD check} no longer report \code{(64-bit)} as part of
+      the platform as this is almost universal -- the increasingly rare
+      32-bit platforms will still report \code{(32-bit)}.
+
+      On Windows, ditto for window titles.
+    }
+  }
 
   \subsection{NEW FEATURES}{
     \itemize{
@@ -19,6 +24,32 @@
       an F test depending on whether the dispersion is fixed or
       free.  Test statistics can be suppressed by giving argument
       \code{test} a false logical value.
+
+      \item In \code{setRepositories()} the repositories can be set
+      using their names via \code{name=} instead of index \code{ind=}.
+
+      \item \code{methods()} and \code{.S3methods()} gain a
+      \code{all.names} option for the (rare) case where functions starting
+      with a \samp{.} should be included.
+
+      \item Serializations can now be interrupted (e.g., by \kbd{Ctrl-C} on
+      a Unix-alike) if they take too long, as e.g., from \code{save.image()},
+      thanks to suggestions by Ivan Krylov and others on R-devel.
+
+      \item New startup option \option{--max-connections} to set the
+      maximum number of connections for the session.  Defaults to 128 as
+      before: allowed values up to 4096 (but resource limits may in practice
+      restrict to smaller values).
+
+      \item \R on Windows (since Windows 10 2004) now uses the new Segment
+      Heap allocator. This may improve performance of some memory intensive
+      applications.
+
+      \item When \R packages are built, typically by \command{R CMD build <pkg>},
+      the new \command{--user=<build_user>} option overrides the
+      (internally determined) user name, currently \code{Sys.info()["user"]}
+      or \env{LOGNAME}.  This is a (modified) fulfillment of Will Landau's
+      suggestion in \PR{17530}.
     }
   }
 
@@ -27,21 +58,171 @@
       \item System valgrind headers are required to use
       \command{configure} option \option{--with-valgrind-instrumentation}
       with value \code{1} or \code{2}.
+
+      \item \command{configure} will warn if it encounters a 32-bit
+      build, as that is nowadays almost untested.
     }
   }
 
-  \subsection{PACKAGE INSTALLATION}{
+  %% \subsection{PACKAGE INSTALLATION}{
+  %%   \itemize{
+  %%     \item .
+  %%   }
+  %% }
+
+  \subsection{UTILITIES}{
     \itemize{
-      \item .
+      \item \command{R CMD check} notes when S4-style exports are used
+      without declaring a strong dependence on package \pkg{methods}.
+
+      \item \code{tools::checkRd()} (used by \command{R CMD check})
+      detects more problems with \verb{\Sexpr}-based dynamic content,
+      including bad nesting of \verb{\Sexpr}s and invalid arguments.
+
+      \item \code{tools::checkRd()} now reports Rd titles and section
+      names ending in a period; this is ignored by \command{R CMD check}
+      unless environment variable \env{_R_CHECK_RD_CHECKRD_MINLEVEL_} is
+      set to -5 or smaller.
     }
   }
 
-  \subsection{C-LEVEL FACILITIES}{
+  \subsection{BUG FIXES}{
     \itemize{
-      \item .
+      \item Arguments are now properly forwarded to methods on S4 generics
+      with \dots{} in the middle of their formal arguments. This was
+      broken for the case when a method introduced an argument but did
+      not include \dots{} in its own formals. Thanks to Hervé Pagès for
+      the report \PR{18538}.
+      
+      \item Probability distribution functions \code{[dpq]<distrib>(x, *)},
+      but also \code{bessel[IKJY](x, .)} are now consistently preserving
+      \code{attributes(x)} when \code{length(x) == 0}, e.g., for a
+      \eqn{2 \times 0}{2 x 0} matrix, thanks to Karolis Koncevičius'
+      report \PR{18509}.
+
+      \item Group \dQuote{Summary} computations such as
+      \code{sum(1:3, 4, na.rm = 5, NA, 7, na.rm = LL)} now give an error
+      instead of either \code{17} or \code{NN} for \code{LL} true or false,
+      as proposed by Ivan Krylov on the R-devel mailing list.  (This
+      also means it is now an error to specify \code{na.rm} more than once.)
+
+      \item \code{as.complex(x)} now returns \code{NA_complex_} also for
+      \code{NA_real_} arguments, as it does for all other \code{NA}s.
+
+      \item Directories are now omitted by
+      \code{file.copy(,recursive = FALSE)} and in \code{file.append()}
+      (\PR{17337}).
+
+      \item \code{gsub()} and \code{sub()} are now more robust to integer
+      overflow when reporting errors caused by too large input strings
+      (\PR{18346}).
+
+      \item Top-level handlers are now more robust to attempts to remove a
+      handler whilst handlers are running (\PR{18508}).
+
+      \item The handling of \code{Alt+F4} in dialogs created on Windows using
+      GraphApp has been fixed (\PR{13870}).
+
+      \item \code{density()} more consistently computes grid values for the
+      FFT based convolution, following Robert Schlicht's analysis and
+      proposal in \PR{18337}, correcting density values typically by a
+      factor of about 0.999.  Optional \code{old.coords=TRUE} provides
+      back compatibility.
+
+      \item \code{palette.colors()} gains a \code{name} argument that
+      defaults to \code{FALSE} controlling whether the vector of colours
+      that is returned has names (where possible).  \PR{18529}.
+
+      \item \code{tools::xgettext()} no longer extracts the
+      (non-translatable) class names from \code{warningCondition} and
+      \code{errorCondition} calls.
+
+      \item \code{S3method(<gen>, <class>, <func>)} in the \file{NAMESPACE}
+      file now works (again) when \code{<func>} is visible from the
+      namespace, e.g., imported, or in base.
+
+      \item \code{getParseData(f)} now also works for a function defined
+      in the first of several \file{<pkg>/R/*.R} source files, thanks to
+      Kirill Müller's report and Duncan Murdoch's patch in \PR{16756}.
+
+      \item \code{tools::checkRd()} no longer produces spurious notes
+      about \dQuote{unnecessary braces} from multi-line Rd results of
+      \verb{\Sexpr} macros.
+
+      \item Rd \verb{\Sexpr} macros with nested \verb{#ifdef}
+      conditionals were not processed.
     }
   }
 }
+
+\section{\Rlogo CHANGES IN R 4.3.1}{
+  \subsection{C-LEVEL FACILITIES}{
+    \itemize{
+      \item The C-level API version of \R's \code{integrate()},
+      \code{Rdqags()} in \file{Applic.h}, now returns the correct number of
+      integrand evaluations \code{neval}, fixing \PR{18515} reported and
+      diagnosed by Stephen Wade.
+
+      \item The C prototypes for LAPACK calls \code{dspgv} and \code{dtptrs}
+      in \file{R_exts/Lapack.h} had one too many and one too few
+      character length arguments --- but this has not caused any known
+      issues. To get the corrected prototypes, include
+      \preformatted{
+	#include <Rconfig.h> // for PR18534fixed
+	#ifdef PR18534fixed
+	# define usePR18534fix 1
+        #endif
+	#include <R_exts/Lapack.h>
+      }
+      in your C/C++ code (\PR{18534}).
+    }
+  }
+
+  \subsection{INSTALLATION}{
+    \itemize{
+      \item Many of the checks of esoteric Internet operations and those
+      using unreliable external sites have been moved to a new target
+      that is not run by default and primarily intended for the core
+      developers.  To run them use
+\preformatted{
+	cd tests; make test-Internet-dev
+}
+    }
+  }
+
+  \subsection{BUG FIXES}{
+    \itemize{
+      \item \code{.S3methods()}, typically called from \code{methods()},
+      again marks methods from package \pkg{base} as \code{visible}.
+
+      Also, the visibility of non-\pkg{base} methods is again determined by
+      the method's presence in \code{\link{search}()}.
+
+      \item \code{tools::Rdiff()} is now more robust against invalid
+      strings, fixing installation tests on Windows without Rtools
+      installed (\PR{18530}).
+
+      \item Fix (new) bug in \code{hcl.colors(2, *)}, by Achim Zeileis (\PR{18523}).
+
+      \item \code{head(., <illegal>)} and \code{tail(..)} now produce
+      more useful \code{"Error in ...."} error messages, fixing \PR{18362}.
+
+      \item Package code syntax on Windows is checked in UTF-8 when UTF-8 is
+      the native encoding.
+
+      \item \code{na.contiguous(x)} now also returns the first run, when it
+      is at the beginning and there is a later one of the same length;
+      reported to R-devel, including a fix, by Georgi Boshnakov.
+      Further, by default, it modifies only an existing
+      \code{attr(*,"tsp")} but otherwise no longer sets one.
+
+      \item \code{chol(<not pos.def>, pivot = <T|F>)} now gives a correct
+      error or warning message (depending on \code{pivot}), thanks to
+      Mikael Jagan's (\PR{18541}).
+    }
+  }
+}
+
 \section{\Rlogo CHANGES IN R 4.3.0}{
   \subsection{SIGNIFICANT USER-VISIBLE CHANGES}{
     \itemize{

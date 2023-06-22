@@ -255,10 +255,12 @@ Rdiff <- function(from, to, useDiff = FALSE, forEx = FALSE,
         if(length(left) == length(right)) {
             ## The idea is to emulate diff -b, as documented by POSIX:
             ## https://pubs.opengroup.org/onlinepubs/9699919799/utilities/diff.html
-            bleft  <- gsub("[[:space:]]*$", "", left)
-            bright <- gsub("[[:space:]]*$", "", right)
-            bleft  <- gsub("[[:space:]]+", " ", bleft)
-            bright <- gsub("[[:space:]]+", " ", bright)
+
+            ## useBytes=TRUE as some tests intentionally use invalid strings
+            bleft  <- gsub("[[:space:]]*$", "", left, useBytes=TRUE)
+            bright <- gsub("[[:space:]]*$", "", right, useBytes=TRUE)
+            bleft  <- gsub("[[:space:]]+", " ", bleft, useBytes=TRUE)
+            bright <- gsub("[[:space:]]+", " ", bright, useBytes=TRUE)
             if(all(bleft == bright))
                 return(if(Log) list(status = 0L, out = character()) else 0L)
             cat("\n")
@@ -480,7 +482,7 @@ testInstalledPackage <-
                 message(gettextf("  comparing %s to %s ...",
                                  sQuote(outfile), sQuote(savefile)),
                         appendLF = FALSE, domain = NA)
-                res <- Rdiff(outfile, savefile)
+                res <- Rdiff(outfile, savefile, useDiff)
                 if (!res) message(" OK")
             }
         }
@@ -759,7 +761,7 @@ testInstalledBasic <- function(scope = c("basic", "devel", "both", "internet"))
             if (f == "reg-plot") {
                 message("  comparing 'reg-plot.pdf' to 'reg-plot.pdf.save' ...",
                         appendLF = FALSE, domain = NA)
-                res <- Rdiff("reg-plot.pdf", "reg-plot.pdf.save")
+                res <- Rdiff("reg-plot.pdf", "reg-plot.pdf.save", TRUE)
                 if(res != 0L) message("DIFFERED") else message("OK")
             }
         }
@@ -772,7 +774,7 @@ testInstalledBasic <- function(scope = c("basic", "devel", "both", "internet"))
         if (runone("reg-plot-latin1", TRUE, inC=FALSE) == 0L) {
             message("  comparing 'reg-plot-latin1.pdf' to 'reg-plot-latin1.pdf.save' ...",
                     appendLF = FALSE, domain = NA)
-            res <- Rdiff("reg-plot-latin1.pdf", "reg-plot-latin1.pdf.save")
+            res <- Rdiff("reg-plot-latin1.pdf", "reg-plot-latin1.pdf.save", TRUE)
             if(res != 0L) message("DIFFERED") else message("OK")
         }
     }

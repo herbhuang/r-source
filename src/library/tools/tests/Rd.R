@@ -51,3 +51,32 @@ stopifnot(grepl("10.1000/456#789", out[5], fixed = TRUE),
           grepl("10.1000/{}", out[7], fixed = TRUE),
           grepl("doi.org/10.1000/%7B%7D", out[7], fixed = TRUE))
 ## R < 4.2.0 failed to encode the hash and lost {}
+
+
+## \title and \section name should not end in a period
+rd <- parse_Rd(textConnection(r"(
+\name{test}
+\title{title.}
+\description{description}
+\section{section.}{nothing}
+)"))
+stopifnot(identical(endsWith(print(checkRd(rd)), "end in a period"),
+                    rep(TRUE, 2)))
+
+## checkRd() with duplicated \name (is documented to fail from prepare_Rd)
+assertError(checkRd(parse_Rd(textConnection(r"(
+\name{test}\title{test}\name{test2}
+)"))), verbose = TRUE)
+## no error in R < 4.4.0
+
+## package overview may lack a \description (WRE-stated exemption)
+cat(r"(\docType{package}\name{pkg}\title{pkg}\section{Overview}{...})",
+    file = tf <- tempfile())
+stopifnot(exprs = {
+    length(print(checkRd(tf))) == 0
+    ## but usual help pages need one:
+    endsWith(print(checkRd(parse_Rd(textConnection(
+        "\\name{test}\\title{test}"
+    )))), "Must have a \\description")
+})
+## *both* gave "checkRd: (5)" output in 2.10.0 <= R < 4.4.0

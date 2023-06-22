@@ -1014,7 +1014,7 @@ function(x)
                 function(e) {
                     e <- e[!vapply(e, is.null, NA)]
                     cargs <-
-                        sprintf("%s = %s", names(e), sapply(e, deparse))
+                        sprintf("%s = %s", names(e), sapply(e, deparse1))
                     .format_call_RR("person", cargs)
                 })
     if(length(s) > 1L)
@@ -1367,6 +1367,7 @@ function(package = "base", lib.loc = NULL, auto = NULL)
               note = paste("R package version", meta$Version)
               )
 
+    ## CRAN-style repositories: CRAN, R-Forge, Bioconductor
     if(identical(meta$Repository, "CRAN"))
         z$url <-
             sprintf("https://CRAN.R-project.org/package=%s", package)
@@ -1390,13 +1391,42 @@ function(package = "base", lib.loc = NULL, auto = NULL)
         z$doi <-
             sprintf("10.18129/B9.bioc.%s", package)
     }
+    
+    ## Git repositories: GitHub, GitLab, ...
+    if(identical(meta$RemoteType, "github") && identical(meta$RemoteHost, "api.github.com")) {
+        if(!is.null(meta$RemoteUsername) && !is.null(meta$RemoteRepo)) {
+            z$url <- sprintf("https://github.com/%s/%s", meta$RemoteUsername, meta$RemoteRepo)
+        }
+        if(!is.null(meta$RemoteSha)) {
+            z$note <- sprintf("%s, commit %s", z$note, meta$RemoteSha)
+        }
+    }
+
+    if(identical(meta$RemoteType, "gitlab")) {
+        if(!is.null(meta$RemoteHost) && !is.null(meta$RemoteUsername) && !is.null(meta$RemoteRepo)) {
+            z$url <- sprintf("https://%s/%s/%s", meta$RemoteHost, meta$RemoteUsername, meta$RemoteRepo)
+        }
+        if(!is.null(meta$RemoteSha)) {
+            z$note <- sprintf("%s, commit %s", z$note, meta$RemoteSha)
+        }
+    }
+
+    if(identical(meta$RemoteType, "git") || identical(meta$RemoteType, "xgit")) {
+        z$url <- meta$RemoteUrl
+        if(!is.null(meta$RemoteSha)) {
+            z$note <- sprintf("%s, commit %s", z$note, meta$RemoteSha)
+        }
+    }
 
     if(!length(z$url) && !is.null(url <- meta$URL)) {
         ## Cannot have several URLs in BibTeX and bibentry object URL
         ## fields (PR #16240).
-        if(grepl("[, ]", url))
-            z$note <- url
-        else
+        if(grepl("[, ]", url)) {
+            ## Show the first URL as the BibTeX url, and add the others
+            ## to the note (PR#18547).
+            z$url <- sub(",.*", "", url)
+            z$note <- paste0(z$note, sub("^[^,]*, ?", ", ", url))
+        } else
             z$url <- url
     }
 

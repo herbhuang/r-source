@@ -69,6 +69,25 @@
    is 64-bit on Windows.
 */
 
+/*
+  NCONNECTIONS.  Prior to R 4.4.0 this was set to 128 in this file.
+  There was concern that file-like connections use file descriptions
+  which have a quite low default limit (256 on macOS, 1024 on Linux),
+  and are needed for other uses including loading DLLs.  (Parallel
+  clusters use a file connection per cluster member.)  Windows is said
+  to have a default limit of 512 file handlws per process.
+
+  As from R 4.4.0 the defailt limit remains 128. but can be overriden
+  by the startup option --max-connections.  This does not allow it to
+  be set below 128 but has a limit of 4096 (see CommandLineArgs.c).
+  The upper limit is conservative, but as creating a new connection
+  uses a linear search in the connections table, some limit is
+  needed. (When checked the table used 488 bytes per connection.)
+
+  Using a dynamic upper limit would not be hard, but not very useful
+  because of the non-dynamic fd limit.
+*/
+
 #ifdef HAVE_CONFIG_H
 # include <config.h>
 #endif
@@ -127,10 +146,12 @@ typedef long long int _lli_t;
 # include <Startup.h>
 #endif
 
-#define NCONNECTIONS 128 /* need one per cluster node */
+static int NCONNECTIONS = 128; /* need one per cluster node */
+//static Rconnection Connections[NCONNECTIONS];
 #define NSINKS 21
 
-static Rconnection Connections[NCONNECTIONS];
+#include <R_ext/RStartup.h>
+static Rconnection * Connections;
 static SEXP OutTextData;
 
 static int R_SinkNumber;
@@ -153,8 +174,10 @@ static int NextConnection(void)
 	R_gc(); /* Try to reclaim unused ones */
 	for(i = 3; i < NCONNECTIONS; i++)
 	    if(!Connections[i]) break;
+	/* To make this dynamic, realloc Connections and set the new
+	   members to NULL. */
 	if(i >= NCONNECTIONS)
-	    error(_("all connections are in use"));
+	    error(_("all %d connections are in use"), NCONNECTIONS);
     }
     return i;
 }
@@ -348,7 +371,7 @@ static double buff_seek(Rconnection con, double where, int origin, int rw)
     return con->seek(con, where, origin, rw);
 }
 
-void set_buffer(Rconnection con) {
+static void set_buffer(Rconnection con) {
     if (con->canread && con->text) {
 	buff_init(con);
     }
@@ -1539,6 +1562,10 @@ attribute_hidden SEXP do_fifo(SEXP call, SEXP op, SEXP args, SEXP env)
 
 /* ------------------- pipe connections --------------------- */
 
+/* This implementation is no longer used on Windows, even in Rterm,
+   because of termination of background processes using Ctrl+C (PR#17764). */
+
+#ifndef Win32
 static Rboolean pipe_open(Rconnection con)
 {
     FILE *fp;
@@ -1567,8 +1594,12 @@ static Rboolean pipe_open(Rconnection con)
 	    return FALSE;
 	}
     } else
-#endif
+	/* this implementation is prone to termination of background
+	   processes using Ctrl+C (PR#17764) */
 	fp = R_popen(con->description, mode);
+#else
+	fp = R_popen_pg(con->description, mode);
+#endif
     if(!fp) {
 	warning(_("cannot open pipe() cmd '%s': %s"), con->description,
 		strerror(errno));
@@ -1590,7 +1621,11 @@ static Rboolean pipe_open(Rconnection con)
 
 static void pipe_close(Rconnection con)
 {
+#ifdef Win32
     con->status = pclose(((Rfileconn)(con->private))->fp);
+#else
+    con->status = R_pclose_pg(((Rfileconn)(con->private))->fp);
+#endif
     con->isopen = FALSE;
 }
 
@@ -1631,7 +1666,7 @@ newpipe(const char *description, int ienc, const char *mode)
     return new;
 }
 
-#ifdef Win32
+#else
 extern Rconnection
 newWpipe(const char *description, int enc, const char *mode);
 #endif
@@ -1673,11 +1708,10 @@ attribute_hidden SEXP do_pipe(SEXP call, SEXP op, SEXP args, SEXP env)
 
     ncon = NextConnection();
 #ifdef Win32
-    if(CharacterMode != RTerm)
-	con = newWpipe(file, ienc, strlen(open) ? open : "r");
-    else
+    con = newWpipe(file, ienc, strlen(open) ? open : "r");
+#else
+    con = newpipe(file, ienc, strlen(open) ? open : "r");
 #endif
-	con = newpipe(file, ienc, strlen(open) ? open : "r");
     Connections[ncon] = con;
     strncpy(con->encname, CHAR(STRING_ELT(enc, 0)), 100); /* ASCII */
     con->encname[100 - 1] = '\0';
@@ -5304,9 +5338,17 @@ void WinCheckUTF8(void)
 
 /* ------------------- admin functions  --------------------- */
 
+attribute_hidden void R_SetNconn(int nconn)
+{
+    if (nconn > 128) NCONNECTIONS = nconn;
+}
+
+
 attribute_hidden void InitConnections(void)
 {
-    int i;
+    Connections = (Rconnection *) malloc(NCONNECTIONS * sizeof(Rconnection));
+    if (!Connections)
+	R_Suicide("could not allocate space for the connections table");
     Connections[0] = newterminal("stdin", "r");
     Connections[0]->fgetc = stdin_fgetc;
     Connections[1] = newterminal("stdout", "w");
@@ -5315,7 +5357,7 @@ attribute_hidden void InitConnections(void)
     Connections[2] = newterminal("stderr", "w");
     Connections[2]->vfprintf = stderr_vfprintf;
     Connections[2]->fflush = stderr_fflush;
-    for(i = 3; i < NCONNECTIONS; i++) Connections[i] = NULL;
+    for(int i = 3; i < NCONNECTIONS; i++) Connections[i] = NULL;
     R_OutputCon = 1;
     R_SinkNumber = 0;
     SinkCons[0] = 1; R_ErrorCon = 2;

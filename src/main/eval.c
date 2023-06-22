@@ -1020,9 +1020,9 @@ SEXP eval(SEXP e, SEXP rho)
 	else
 	    tmp = findVar(e, rho);
 	if (tmp == R_UnboundValue)
-	    errorcall(getLexicalCall(rho),
-		      _("object '%s' not found"),
-		      EncodeChar(PRINTNAME(e)));
+	    errorcall_cpy(getLexicalCall(rho),
+			  _("object '%s' not found"),
+			  EncodeChar(PRINTNAME(e)));
 	/* if ..d is missing then ddfindVar will signal */
 	else if (tmp == R_MissingArg && !DDVAL(e) ) {
 	    const char *n = CHAR(PRINTNAME(e));
@@ -3843,7 +3843,7 @@ int DispatchOrEval(SEXP call, SEXP op, const char *generic, SEXP args,
 	    /* create a promise to pass down to applyClosure  */
 	    if(!argsevald) {
 		argValue = promiseArgs(args, rho);
-		SET_PRVALUE(CAR(argValue), x);
+		IF_PROMSXP_SET_PRVALUE(CAR(argValue), x);
 	    } else argValue = args;
 	    PROTECT(argValue); nprotect++;
 	    /* This means S4 dispatch */
@@ -3899,7 +3899,7 @@ int DispatchOrEval(SEXP call, SEXP op, const char *generic, SEXP args,
 	       Hence here and in the other usemethod() uses below a
 	       new environment rho1 is created and used.  LT */
 	    PROTECT(rho1 = NewEnvironment(R_NilValue, R_NilValue, rho)); nprotect++;
-	    SET_PRVALUE(CAR(pargs), x);
+	    IF_PROMSXP_SET_PRVALUE(CAR(pargs), x);
 	    begincontext(&cntxt, CTXT_RETURN, call, rho1, rho, pargs, op);
 	    if(usemethod(generic, x, call, pargs, rho1, rho, R_BaseEnv, ans))
 	    {
@@ -4185,7 +4185,7 @@ int DispatchGroup(const char* group, SEXP call, SEXP op, SEXP args, SEXP rho,
     if (length(s) != length(args))
 	error(_("dispatch error in group dispatch"));
     for (m = s ; m != R_NilValue ; m = CDR(m), args = CDR(args) ) {
-	SET_PRVALUE(CAR(m), CAR(args));
+	IF_PROMSXP_SET_PRVALUE(CAR(m), CAR(args));
 	/* ensure positional matching for operators */
 	if(isOps) SET_TAG(m, R_NilValue);
     }
@@ -5452,9 +5452,9 @@ NORET static void MISSING_ARGUMENT_ERROR(SEXP symbol, SEXP rho)
 
 NORET static void UNBOUND_VARIABLE_ERROR(SEXP symbol, SEXP rho)
 {
-    errorcall(getLexicalCall(rho),
-	      _("object '%s' not found"),
-	      EncodeChar(PRINTNAME(symbol)));
+    errorcall_cpy(getLexicalCall(rho),
+		  _("object '%s' not found"),
+		  EncodeChar(PRINTNAME(symbol)));
 }
 
 static R_INLINE SEXP FORCE_PROMISE(SEXP value, SEXP symbol, SEXP rho,
@@ -5673,7 +5673,7 @@ static int tryDispatch(char *generic, SEXP call, SEXP x, SEXP rho, SEXP *pv)
   SEXP op = SYMVALUE(install(generic)); /**** avoid this */
 
   PROTECT(pargs = promiseArgs(CDR(call), rho));
-  SET_PRVALUE(CAR(pargs), x);
+  IF_PROMSXP_SET_PRVALUE(CAR(pargs), x);
 
   /**** Minimal hack to try to handle the S4 case.  If we do the check
 	and do not dispatch then some arguments beyond the first might

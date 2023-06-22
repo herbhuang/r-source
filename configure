@@ -5433,6 +5433,12 @@ fi
 done
 test -n "$WHICH" || WHICH="which"
 
+if test "${WHICH}" = which ; then
+  ## needed to build and run R
+  ## ends up hard-coded in the utils package
+  as_fn_error $? "which is required but missing" "$LINENO" 5
+fi
+
 ## Make
 : ${MAKE=make}
 
@@ -27054,7 +27060,7 @@ _ACEOF
 # flags.
 r_save_CFLAGS=$CFLAGS
 CFLAGS="$CFLAGS $r_verb"
-(eval echo $as_me:27059: \"$ac_link\") >&5
+(eval echo $as_me:27065: \"$ac_link\") >&5
 r_c_v_output=`eval $ac_link 5>&1 2>&1 | grep -v 'Driving:'`
 echo "$r_c_v_output" >&5
 CFLAGS=$r_save_CFLAGS
@@ -27130,7 +27136,7 @@ _ACEOF
 # flags.
 r_save_CFLAGS=$CFLAGS
 CFLAGS="$CFLAGS $r_cv_prog_c_v"
-(eval echo $as_me:27135: \"$ac_link\") >&5
+(eval echo $as_me:27141: \"$ac_link\") >&5
 r_c_v_output=`eval $ac_link 5>&1 2>&1 | grep -v 'Driving:'`
 echo "$r_c_v_output" >&5
 CFLAGS=$r_save_CFLAGS
@@ -28984,7 +28990,6 @@ esac
 
 ## This was -ffloat-store on all gfortran/g77 platforms prior to R 3.5.0
 ## Suggestion adopted from https://gcc.gnu.org/wiki/FloatingPointMath
-## It was already the default on 32-bit macOS
 if test "${SAFE_FFLAGS+set}" != set; then
   if test "x${ac_cv_fc_compiler_gnu}" = xyes; then
     case "${host_cpu}" in
@@ -28999,13 +29004,6 @@ if test "${SAFE_FFLAGS+set}" != set; then
     SAFE_FFLAGS="${FFLAGS}"
   fi
 fi
-
-## If the Fortran compiler is gfortran >= 7, add
-## -fno-optimize-sibling-calls to avoid recent gfortran optimizations
-## that break with LAPACK/BLAS-style passing of length-1 strings
-## (without hidden arguments giving their lengths).
-## No longer used once all packages are passing char lengths.
-
 
 ### type for Fortran 'hidden' character lengths, if any
 ### Try setting FPIFLAGS if not already set.
@@ -29310,6 +29308,7 @@ if test -n "${XMKMF}"; then
 fi
 
 ## Step 2.  GNU compilers.
+## (And those C/C++ compilers claiming conformity.)
 if test "${GCC}" = yes; then
   case "${host_cpu}" in
 ## Sparc has only an 8k global object table, 1024 entries on 64-bit.
@@ -29339,8 +29338,9 @@ if test "${ac_cv_fc_compiler_gnu}" = yes; then
   esac
 fi
 ## Assume flang is the same as clang (it is a modified front end)
+## Also flang-new
 case "${FC}" in
-  *flang|flang-*)
+  *flang|*flang-new)
     fpicflags=${cpicflags}
     ;;
 esac
@@ -44785,6 +44785,14 @@ _ACEOF
 fi
 done
 
+## stpcpy is POSIX 2008 (extension to C)
+ac_fn_c_check_func "$LINENO" "stpcpy" "ac_cv_func_stpcpy"
+if test "x$ac_cv_func_stpcpy" = xyes
+then :
+  printf "%s\n" "#define HAVE_STPCPY 1" >>confdefs.h
+
+fi
+
 
 ## Lots of uses of getwd(), file.access(), Sys.glob().
 ## We don't need times() except as a fallback for getrusage and
@@ -45653,7 +45661,7 @@ int main(void) {
     putenv("TZ=Europe/London");
     tm.tm_sec = tm.tm_min = 0; tm.tm_hour = 12;
     tm.tm_mday = 1; tm.tm_mon = 0; tm.tm_year = 120; tm.tm_isdst = -1;
-    // test 2020-01-01, whoch is assumed to be in GMT
+    // test 2020-01-01, which is assumed to be in GMT
     res = mktime(&tm);
 #ifdef PRINT
     printf("res %ld\n", res);
@@ -45771,6 +45779,7 @@ else $as_nop
   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
+#include <limits.h>
 #include <stdlib.h>
 #include <time.h>
 #include <errno.h>
@@ -45778,13 +45787,45 @@ else $as_nop
 int main(void)
 {
     struct tm tm;
+    time_t res;
     /* It's hard to know what is an error, since mktime is allowed to
-       fix up times. But this worked for now (yes on Solaris, no on glibc). */
+       fix up times.
+
+       POSIX requires that mktime() sets errno, but it was optional
+       in earlier versions. Test whether once (time_t)-1 is returned
+       as an indication error, errno is set (see also PR#18532).
+       At time of writing, Linux & Windows set errno, macOS does not.
+
+       The tests below are POSIX only, because ISO C does not specify the
+       meaning of time_t values, and hence we cannot know for sure that the
+       result is an indication of error and not a valid representation of
+       the date.  On POSIX, it is the number of seconds since Epoch. */
+
+    /* test year 4900, which will fail with 32-bit time_t */
     tm.tm_year = 3000; tm.tm_mon = 0; tm.tm_mday = 0;
     tm.tm_hour = 0; tm.tm_min = 0; tm.tm_sec = 0; tm.tm_isdst = -1;
     errno = 0;
-    mktime(&tm);
-    exit(errno == 0);
+    res = mktime(&tm);
+    if (res == (time_t)-1)
+      exit(errno == 0);
+
+    /* try harder to produce invalid date */
+    tm.tm_year = INT_MAX; tm.tm_mon = INT_MAX; tm.tm_mday = INT_MAX;
+    tm.tm_hour = 0; tm.tm_min = 0; tm.tm_sec = 0; tm.tm_isdst = -1;
+    errno = 0;
+    res = mktime(&tm);
+    if (res == (time_t)-1)
+      exit(errno == 0);
+
+    /* try year 1848 */
+    tm.tm_year = -52; tm.tm_mon = 0; tm.tm_mday = 0;
+    tm.tm_hour = 0; tm.tm_min = 0; tm.tm_sec = 0; tm.tm_isdst = -1;
+    errno = 0;
+    res = mktime(&tm);
+    if (res == (time_t)-1)
+      exit(errno == 0);
+
+    exit(1); /* fall back to errno not set */
 }
 
 _ACEOF
@@ -61790,6 +61831,10 @@ fi
 if test -n "${warn_pdfviewer}"; then
   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: WARNING: ${warn_pdfviewer}" >&5
 printf "%s\n" "$as_me: WARNING: ${warn_pdfviewer}" >&2;}
+fi
+if test "${ac_cv_sizeof_size_t}" = 4; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: WARNING: 32-bit build -- this is little tested" >&5
+printf "%s\n" "$as_me: WARNING: 32-bit build -- this is little tested" >&2;}
 fi
 
 ### Local variables: ***

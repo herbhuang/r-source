@@ -636,6 +636,7 @@ void (SET_PRSEEN)(SEXP x, int v);
 void SET_PRENV(SEXP x, SEXP v);
 void SET_PRVALUE(SEXP x, SEXP v);
 void SET_PRCODE(SEXP x, SEXP v);
+void IF_PROMSXP_SET_PRVALUE(SEXP x, SEXP v);
 
 /* Hashing Functions */
 int  (HASHASH)(SEXP x);
@@ -2161,6 +2162,7 @@ R_size_t R_GetMaxNSize(void);
 void R_SetMaxNSize(R_size_t);
 R_size_t R_Decode2Long(char *p, int *ierr);
 void R_SetPPSize(R_size_t);
+void R_SetNconn(int);
 
 void R_expand_binding_value(SEXP);
 
@@ -2276,6 +2278,10 @@ double R_atof(const char *str);
 
 /* unix/sys-std.c, main/options.c */
 void set_rl_word_breaks(const char *str);
+
+/* unix/sys-unix.c, main/connections.c */
+FILE *R_popen_pg(const char *cmd, const char *type);
+int R_pclose_pg(FILE *fp);
 
 /* From localecharset.c */
 extern const char *locale2charset(const char *);

@@ -1363,7 +1363,10 @@ if ( any(file.exists(execs)) ) @{
 
 @noindent
 Note the use of architecture-specific subdirectories of @file{bin} where
-needed.
+needed.  (Executables should installed under a @file{bin} directory and
+not under @file{libs}.  It is good practice to check that they can be
+executed as part of the installation script, so a broken package is not
+installed.)
 
 The @file{data} subdirectory is for data files: @xref{Data in packages}.
 
@@ -2436,16 +2439,17 @@ SHLIB_OPENMP_FFLAGS
 @end example
 
 @noindent
-are available for use in @file{src/Makevars}, @file{src/Makevars.win}
-or @file{Makevars.ucrt}.
-Include the appropriate macro in @code{PKG_CFLAGS}, @code{PKG_CXXFLAGS}
-and so on, and also in @code{PKG_LIBS} (but see below for Fortran).
-C/C++ code that needs to be conditioned on the use of OpenMP can be used
-inside @code{#ifdef _OPENMP}: note that some toolchains used for @R{}
-(including Apple's for macOS and some others using
-@command{clang}@footnote{Default builds of LLVM @command{clang} 3.8.0 and
-later have support for OpenMP, but the @code{libomp} run-time library
-may not be installed.}) have no OpenMP support at all, not even
+are available for use in @file{src/Makevars}, @file{src/Makevars.win} or
+@file{Makevars.ucrt}.  Include the appropriate macro in
+@code{PKG_CFLAGS}, @code{PKG_CXXFLAGS} and so on, and also in
+@code{PKG_LIBS} (but see below for Fortran).  C/C++ code that needs to
+be conditioned on the use of OpenMP can be used inside @code{#ifdef
+_OPENMP}: note that some toolchains used for @R{} (including Apple's for
+macOS@footnote{There are somewhat fragile workarounds: see
+@uref{https://mac.r-project.org/openmp/}.} and some others using
+@command{clang}@footnote{Default builds of LLVM @command{clang} 3.8.0
+and later have support for OpenMP, but the @code{libomp} run-time
+library may not be installed.}) have no OpenMP support at all, not even
 @file{omp.h}.
 
 For example, a package with C code written for OpenMP should have in
@@ -2841,31 +2845,30 @@ or by setting the environment variables @code{ODBC_INCLUDE} and
 
 @R{} assumes that source files with extension @file{.f} are fixed-form
 Fortran 90 (which includes Fortran 77), and passes them to the compiler
-specified by macro @samp{FC}.  On known platforms the Fortran compiler
-will also accept free-form Fortran 90/95 code with extension @file{.f90}
-or @file{.f95}, but those are not used by @R{} itself so this is not
-required.
+specified by macro @samp{FC}.  The Fortran compiler will also accept
+free-form Fortran 90/95 code with extension @file{.f90} or @file{.f95}.
 
 @vindex PKG_FCFLAGS
-The same compiler is used@footnote{for versions of @R{} since 3.6.0.}
-for both fixed-form and free-form Fortran code (with different file
-extensions and possibly different flags).  Macro @code{PKG_FFLAGS} can
-be used for package-specific flags: for the un-encountered case that both
-are included in a single package and that different flags are needed for
-the two forms, macro @code{PKG_FCFLAGS} is also available for free-form
-Fortran.
+The same compiler is used for both fixed-form and free-form Fortran code
+(with different file extensions and possibly different flags).  Macro
+@code{PKG_FFLAGS} can be used for package-specific flags: for the
+un-encountered case that both are included in a single package and that
+different flags are needed for the two forms, macro @code{PKG_FCFLAGS}
+is also available for free-form Fortran.
 
 The code used to build @R{} allows a `Fortran 90' compiler to be
 selected as @samp{FC}, so platforms might be encountered which only
-support Fortran 90.  However, Fortran 95 is widely supported.
+support Fortran 90.  However, Fortran 95 is supported on all known
+platforms.
 
-Some compilers specified by @samp{FC} will accept Fortran 2003, 2008 or
+Most compilers specified by @samp{FC} will accept Fortran 2003, 2008 or
 2018 code: such code should still use file extension @file{.f90} or
 @file{.f95}.  Almost all current platforms use @command{gfortran} where
 you may need to include @option{-std=f2003}, @option{-std=f2008} or
 (from version 8) @option{-std=f2018} in @code{PKG_FFLAGS} or
-@code{PKG_FCFLAGS}: the default is `GNU Fortran', Fortran 95 with
-non-standard extensions.
+@code{PKG_FCFLAGS}: the default is `GNU Fortran', currently Fortran 2018
+(but Fortran 95 prior to @command{gfortran}@tie{}8) with non-standard
+extensions.
 @c The Oracle @command{f95} compiler `accepts some Fortran 2003/8 features'
 @c (search for `Oracle Developer Studio 12.6: Fortran User's Guide' and
 @c look for §4.6).
@@ -2929,8 +2932,8 @@ Unix-alike @command{configure} will try to identify a compiler and flags
 for each of the standards: this relies heavily on the reported values of
 @code{__cplusplus}.
 
-@c Apple clang 14 defaults to C++98
-@c LLVM clang 15, 16 default to C++14
+@c Apple clang 14 defaults to C++98 (even 14.0.3)
+@c LLVM clang 14, 15 default to C++14, 16 to C++17
 @c g++ 11, 12, 13 default to C++17
 
 The webpage
@@ -3065,9 +3068,9 @@ sublibs:
 The discussion above is about the standard @R{} ways of compiling C++:
 it will not apply to packages using @file{src/Makefile} or building in a
 subdirectory that do not set the C++ standard.  And compilers' default
-C++ standards varies widely and gets changed frequently by vendors -- for
-example Apple clang 14 defaults to C++98, LLVM clang 14 to C++14 and
-@command{g++} 12 to C++17.
+C++ standards varies widely and gets changed frequently by vendors --
+for example Apple clang 14 defaults to C++98, LLVM clang 14--15 to C++14,
+LLVM clang 16 to C++17 and @command{g++} 11--13 to C++17.
 
 For a package with a @file{src/Makefile} (or a Windows analogue),
 a non-default C++ compiler can be selected by including something like
@@ -3117,8 +3120,8 @@ in use).  C++11 support became mandatory in @R{} 4.0.0.
 @node C standards, Using @command{cmake}, Using C++ code, Configure and cleanup
 @subsection C standards
 
-C has had standards C89/C90, C99, C11, C17 (also known as C18) and C23
-is in final draft and expected to be published during 2023.  C11 was a
+C has had standards C89/C90, C99, C11, C17 (also known as C18), and C23
+is in final draft and expected to be published in early 2024.  C11 was a
 minor change to C99 which introduced some new features and made others
 optional, and C17 is a `bug-fix' update to C11.  On the other hand, C23
 makes extensive changes, including making @code{bool}, @code{true} and
@@ -3162,9 +3165,9 @@ for example @code{__STDC_VERSION_LIMITS_H__}.
 
 However, note the `claimed' as no compiler had 100% conformance, and it
 is better to use @command{configure} to test for the feature you want to
-use that to condition on the value of @code{__STDC_VERSION__}.  In
-particular, alignment functionality such as @code{_Alignas} and
-@code{aligned_alloc} are not implemented on Windows.
+use than to condition on the value of @code{__STDC_VERSION__}.  In
+particular, C11 alignment functionality such as @code{_Alignas} and
+@code{aligned_alloc} is not implemented on Windows.
 
 End users can specify a standard by something like @command{R CMD
 INSTALL --use-C17}.  This overrides the @samp{SystemRequirements} field,
@@ -5379,11 +5382,16 @@ be for binary packages).
 When specifying a minimum Java version please use the official version
 names, which are (confusingly)
 @example
-1.1 1.2 1.3 1.4 5.0 6 7 8 9 10 11 12 13 14 15 16 17 18 (announced 19 20 21)
+1.1 1.2 1.3 1.4 5.0 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 (announced 21)
 @end example
 @noindent
 and as from 2018 a year.month scheme such as @samp{18.9} is also in
 use.  Fortunately only the integer values are likely to be relevant.
+If at all possible, use one of the @acronym{LTS} versions (8, 11, 17, 21 @dots{})
+as the minimum version.  The preferred form of version specification is
+@example
+SystemRequirements: Java (>= 11)
+@end example
 
 A suitable test for Java at least version 8 for packages using
 @CRANpkg{rJava} would be something like
@@ -5412,16 +5420,17 @@ java.lang.UnsupportedClassVersionError: ... Unsupported major.minor version 52.0
 @noindent
 (Where @uref{https://en.wikipedia.org/wiki/Java_class_file} maps
 class-file version numbers to Java versions.)  Compile with something
-like @command{javac -target 1.6} to ensure this is avoided. (As from
-Java 8, @command{javac} defaults to compiling for Java 8.  Versions as
-old as @samp{1.6} are already deprecated and will give a warning with
-Java 10's @command{javac}.)  Note this also applies to packages
-distributing (or even downloading) compiled Java code produced by
-others, so their requirements need to be checked (they are often not
-documented accurately) and accounted for.  It should be possible to
-check the class-file version @emph{via} command-line utility
-@command{javap}, if necessary after extracting the @file{.class} files
-from a @file{.jar} archive.
+like @command{javac -target 11} to ensure this is avoided.  Note this
+also applies to packages distributing (or even downloading) compiled
+Java code produced by others, so their requirements need to be checked
+(they are often not documented accurately) and accounted for.  It should
+be possible to check the class-file version @emph{via} command-line
+utility @command{javap}, if necessary after extracting the @file{.class}
+files from a @file{.jar} archive.  For example,
+@example
+jar xvf some.jar
+javap -verbose path/to/some.class | grep major
+@end example
 
 Some packages have stated a requirement on a particular JDK, but a
 package should only be requiring a JRE unless providing its own Java
@@ -5430,7 +5439,9 @@ interface.
 @c https://endoflife.date/java
 Java 8 is still in widespread use (and may remain so because of licence
 changes and support on older OSes: OpenJDK has security support until
-March 2026).
+March 2026).  On the other hand, newer platforms may only have support
+for recent versions of Java: for @cputype{arm64} macOS the first
+officially supported version was 17.
 
 @item
 A package with a hard-to-satisfy system requirement is by definition not
@@ -5441,10 +5452,7 @@ platforms (and has onerous requirements to install from source) and has
 capabilities@footnote{For example, the ability to handle @samp{https://}
 URLs.} that vary by build but are not documented.  Several recent
 versions of @command{pandoc} for macOS did not work on @R{}'s target of
-High Sierra (and this too was undocumented): at the time of writing
-@samp{2.14.0} to @samp{2.16.2} did, but not @samp{2.17.0.1}.  (Currently
-@command{pandoc} is only available from the official site for Intel
-macOS but that build works well enough on @cputype{arm64} machines.)
+High Sierra (and this too was undocumented).
 Another example is the Rust compilation system (@command{cargo} and
 @command{rustc}).
 
@@ -5502,6 +5510,15 @@ only usual situation when @env{R_HOME} is needed in the argument for
 @example
 $(MAKE) -f "$@{R_HOME@}/etc$@{R_ARCH@}/Makeconf" -f Makefile.inner
 @end example
+
+@item
+If distributing datasets involving date-times, consider if a time zone
+needs to be specified. The most portable way to distribute date-times is
+as objects of class @code{"POSIXct"} and as these record the time in
+UTC, the time represented is independent of the time zone: but how it is
+printed may not be.  Objects of class @code{"POSIXlt"} should have a
+@code{"tzone"} attribute.  Dates (e.g,@: birthdays) are conventionally
+considered independently of time zone.
 @end itemize
 
 
@@ -5593,7 +5610,7 @@ especially those near boundaries (problems have most often be seen in
 with offsets not in whole hours (Adelaide, Chatham Islands, @dots{}).
 More extreme examples are @samp{Africa/Conakry} (permanent UTC),
 @samp{Asia/Calcutta} (no DST, permanent half-hour offset)
-and @samp{Pacific/Kiritimati]}(no DST, more than 12 hours ahead of UTC).
+and @samp{Pacific/Kiritimati}(no DST, more than 12 hours ahead of UTC).
 
 @end itemize
 
@@ -5645,8 +5662,8 @@ See @uref{https://ghostscript.readthedocs.io/en/latest/VectorDevices.html} for
 more such and consider all the options for image downsampling).  There
 have been examples in @acronym{CRAN} packages for which current versions
 of Ghostscript produced much bigger reductions than earlier ones (e.g.@:
-at the upgrades from @code{9.50} to @code{9.52} and from @code{9.55} to
-@code{9.56}).
+at the upgrades from @code{9.50} to @code{9.52}, from @code{9.55} to
+@code{9.56} and then to @code{10.00.0}).
 
 We come across occasionally large PDF files containing excessively
 complicated figures using PDF vector graphics: such figures are often
@@ -5753,6 +5770,10 @@ supported in strict Latin-1 locales nor in CJK locales on Windows.  A
 surprisingly common misuse is to use a right quote in @samp{don't}
 instead of the correct apostrophe.
 
+Datasets can include marked UTF-8 or Latin-1 character strings.  As @R{}
+is nowadays unlikely to be run in a Latin-1 or Windows' CP1252 locale,
+for performance reasons these should be converted to UTF-8.
+
 If you want to run @command{R CMD check} on a Unix-alike over a package
 that sets a package encoding in its @file{DESCRIPTION} file @emph{and do
 not use a UTF-8 locale} you may need to specify a suitable locale
@@ -5774,11 +5795,17 @@ so it is strongly recommended to check in a UTF-8 locale.
 
 @menu
 * Common symbols::
+* C++17 issues::
 @end menu
 
 Writing portable C and C++ code is mainly a matter of observing the
 standards (C99, C++14 or where declared C++11/17/20) and testing that
-extensions (such as POSIX functions) are supported.
+extensions (such as POSIX functions) are supported.  Do make maximal use
+of your compiler diagnostics --- this typically means using flags
+@option{-Wall} and @option{-pedantic} for both C and C++ and additionally
+@option{-Werror=implicit-function-declaration} and
+@option{-Wstrict-prototypes} for C (on some platforms and compiler
+versions) these are part of @option{-Wall} or @option{-pedantic}).
 
 @strong{C++ standards}: From version 3.6.0 (3.6.2 on Windows), @R{}
 defaulted to C++11 where available@footnote{which it is on all known
@@ -5794,10 +5821,6 @@ Note that the `TR1' C++ extensions are not part of any of these
 standards and the @code{<tr1/@var{name}>} headers are not supplied by some of
 the compilers used for @R{}, including on macOS.  (Use the C++11
 versions instead.)
-
-As noted elsewhere, the C++17 standard was finalized in Dec 2017 and
-support for it is patchy or absent on several platforms used for @R{}.
-So portable code should not require C++17 (let alone C++20).
 
 @c Centos had 10 years of support, for Centos 7 expiring in June 2024.
 @c RHEL has 10 years, with more extended support, up to 4 years.
@@ -6294,7 +6317,7 @@ Some additional information for C++ is available at
 @uref{https://journal.r-project.org/archive/2011-2/RJournal_2011-2_Plummer.pdf}
 by Martyn Plummer.
 
-@node Common symbols,  , Portable C and C++ code, Portable C and C++ code
+@node Common symbols, C++17 issues, Portable C and C++ code, Portable C and C++ code
 @subsubsection Common symbols
 
 Most OSes (including all those commonly used for @R{}) have the concept
@@ -6306,7 +6329,7 @@ object, or to a non-tentative definition.  However,
 @uref{https://gcc.gnu.org/gcc-10/porting_to.html}.} and
 LLVM @command{clang}@tie{}11@footnote{See
 @uref{https://prereleases.llvm.org/11.0.0/rc2/tools/clang/docs/ReleaseNotes.html#modified-compiler-flags}.}
-have changed their default so that tentative definitions cannot be
+changed their default so that tentative definitions cannot be
 merged and the linker will give an error if the same variable is defined
 in more than one object file.  To avoid this, all but one of the C
 source files should declare the variable @code{extern} --- which means
@@ -6334,6 +6357,68 @@ versions of @command{gcc} and @command{clang}.
 @option{-fno-common} is said to be particularly beneficial for ARM cpus.
 
 This is not pertinent to C++ which does not permit tentative definitions.
+
+@node C++17 issues,  , Common symbols, Portable C and C++ code
+@subsubsection C++17 issues
+
+@R{} 4.3.0 and later default to C++17 when compiling C++, and that
+finally removed many C++98 features which were deprecated as long ago as
+C++11.  Compiler/runtime authors have been slow to remove these, but
+LLVM @command{clang} with its @code{libc++} runtime library finally
+started to do so in 2023 -- some others warn but some do not.
+
+The principal offender is the `Boost' collection of C++ headers and
+libraries.  There are two little-documented ways to work around aspects
+of its outdated code.  One is to add
+@example
+-D_HAS_AUTO_PTR_ETC=0
+@end example
+@noindent
+to @code{PKG_CPPLAGS} in @file{src/Makevars}, @file{src/Makevars.win}
+and @file{src/Makevars.ucrt}.  This covers
+the removal of
+@example
+std::auto_ptr
+std::unary_function
+std::binary_function
+std::random_shuffle
+std::binder1st
+std::binder2nd
+@end example
+@noindent
+with most issues seen with code that includes @file{boost/functional.hpp},
+usually indirectly.
+
+A rarer issue is the use of illegal values for @code{enum} types,
+usually negative ones such as
+@example
+BOOST_MPL_AUX_STATIC_CAST(AUX_WRAPPER_VALUE_TYPE, (value - 1));
+@end example
+@noindent
+in @file{boost/mpl/aux_/integral_wrapper.hpp}.  Adding
+@example
+ -Wno-error=enum-constexpr-conversion
+@end example
+@noindent
+to @code{PKG_CXXFLAGS} will allow this, but that flag is only accepted
+by recent versions of LLVM @command{clang} so needs a @command{configure} test.
+
+Pre=built versions of current @command{clang}/@code{libc++} are
+usually available from
+@uref{https://github.com/llvm/llvm-project/releases} for a wide range of
+platforms (but the Windows builds there are not compatible with
+@code{Rtools} and the macOS ones are unsigned).  To select
+@code{libc++} add @option{-stdlib=libc++} to @code{CXX}, for example
+by having
+@example
+CXX="/path/to/clang/clang++ -std=gnu++17 -stdlib=libc++"
+@end example
+@noindent
+in @file{~/.R/Makevars}.
+
+Another build for Windows which may be sufficiently compatible with
+@code{Rtools} can be found at
+@uref{https://github.com/mstorsjo/llvm-mingw}: this uses @code{libc++}.
 
 @node Binary distribution,  , Portable C and C++ code, Writing portable packages
 @subsection Binary distribution
@@ -7448,7 +7533,8 @@ For example
 @noindent
 For consistency with the pre-assigned sections, the section name (the
 first argument to @code{\section}) should be capitalized (but not all
-upper case).  Whitespace between the first and second braced expressions
+upper case) and not end in a period.
+Whitespace between the first and second braced expressions
 is not allowed.  Markup (e.g.@: @code{\code}) within the section title
 may cause problems with the latex conversion (depending on the version
 of macro packages such as @samp{hyperref}) and so should be avoided.

@@ -569,7 +569,7 @@ function(file, pdf = FALSE, clean = FALSE, quiet = TRUE,
 .ORCID_iD_db_from_package_sources <-
 function(dir)
 {
-    meta <- .read_description(file.path(dir, "DESCRIPTION"))
+    meta <- .get_package_metadata(dir, FALSE)
     ids1 <- ids2 <- character()
     if(!is.na(aar <- meta["Authors@R"])) {
         aar <- tryCatch(utils:::.read_authors_at_R_field(aar),
@@ -817,7 +817,7 @@ function(x, predicate = NULL, recursive = FALSE)
     calls <- list()
 
     if(!is.recursive(x) || isS4(x)) return(calls)
-    
+
     x <- if(is.call(x))
              list(x)
          else {
@@ -984,7 +984,9 @@ function(primitive = TRUE) # primitive means 'include primitives'
     out <-
         ## Get the names of R internal S3 generics (via DispatchOrEval(),
         ## cf. ?InternalMethods).
-        c("[", "[[", "$", "[<-", "[[<-", "$<-", "@<-",
+        c("[", "[[", "$", "[<-", "[[<-", "$<-", "@", "@<-",
+          ## The above are actually primitive but not listed in
+          ## base::.S3PrimitiveGenerics et al: not sure why?
           "as.vector", "cbind", "rbind", "unlist",
           "is.unsorted", "lengths", "nchar", "rep.int", "rep_len",
           .get_S3_primitive_generics()
@@ -1196,7 +1198,7 @@ function(db,
 ### ** .get_S3_generics_in_base
 
 .get_S3_generics_in_base <-
-function() 
+function()
 {
     ## .get_S3_generics_in_env(.BaseNamespaceEnv) gets all UseMethod
     ## generics.
@@ -1220,7 +1222,7 @@ function()
       .get_internal_S3_generics(),
       .get_S3_group_generics())
 }
-    
+
 ### ** .get_S3_generics_in_env
 
 .get_S3_generics_in_env <-
@@ -1788,7 +1790,7 @@ function(parent = parent.frame())
     ctx <- NULL
     function() {
         if(is.null(fun) && requireNamespace("V8", quietly = TRUE)) {
-            dir <- file.path(R.home(), "doc", "html")
+            dir <- file.path(R.home("doc"), "html")
             ctx <<- V8::v8("window")
             ctx$source(file.path(dir, "katex", "katex.js"))
             ## Provides additional macros:
@@ -2490,6 +2492,8 @@ function(fun, args = list(), opts = character(), env = character(),
             tfi)
     cmd <- if(.Platform$OS.type == "windows") {
                if(nzchar(arch))
+                   ## R.home("bin") might be better, but Windows
+                   ## installation is monolithic
                    file.path(R.home(), "bin", arch, "Rterm.exe")
                else
                    file.path(R.home("bin"), "Rterm.exe")

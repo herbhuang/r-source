@@ -680,6 +680,12 @@ AC_PATH_PROGS(SED, sed, /bin/sed, [/usr/xpg4/bin:$PATH])
 ## 'which' is not POSIX, and might be a shell builtin or alias
 ##  (but should not be in 'sh')
 AC_PATH_PROGS(WHICH, which, which)
+if test "${WHICH}" = which ; then
+  ## needed to build and run R
+  ## ends up hard-coded in the utils package
+  AC_MSG_ERROR([[which is required but missing]])
+fi
+
 ## Make
 : ${MAKE=make}
 AC_SUBST(MAKE)
@@ -1222,7 +1228,6 @@ esac
 
 ## This was -ffloat-store on all gfortran/g77 platforms prior to R 3.5.0
 ## Suggestion adopted from https://gcc.gnu.org/wiki/FloatingPointMath
-## It was already the default on 32-bit macOS
 if test "${SAFE_FFLAGS+set}" != set; then
   if test "x${ac_cv_fc_compiler_gnu}" = xyes; then
     case "${host_cpu}" in
@@ -1237,28 +1242,6 @@ if test "${SAFE_FFLAGS+set}" != set; then
     SAFE_FFLAGS="${FFLAGS}"
   fi
 fi
-
-## If the Fortran compiler is gfortran >= 7, add
-## -fno-optimize-sibling-calls to avoid recent gfortran optimizations
-## that break with LAPACK/BLAS-style passing of length-1 strings
-## (without hidden arguments giving their lengths).
-## No longer used once all packages are passing char lengths.
-dnl AC_MSG_CHECKING([if need -fno-optimize-sibling-calls for gfortran])
-dnl AC_CACHE_VAL([r_cv_have_gfortran7],
-dnl [r_cv_have_gfortran7=no
-dnl if test "x${GFC}" = xyes; then
-dnl   gfortran_version_maj=`echo "__GNUC__" | ${FC} -E -P - | ${SED} 's/ //g'`
-dnl   if test ${gfortran_version_maj} -ge 7; then
-dnl     r_cv_have_gfortran7=yes
-dnl   fi
-dnl fi])
-
-dnl if test "x${r_cv_have_gfortran7}" = xyes; then
-dnl   AC_MSG_RESULT([yes])
-dnl   R_XTRA_FFLAGS="-fno-optimize-sibling-calls"
-dnl else
-dnl   AC_MSG_RESULT([no])
-dnl fi
 
 ### type for Fortran 'hidden' character lengths, if any
 ### Try setting FPIFLAGS if not already set.
@@ -1393,6 +1376,7 @@ if test -n "${XMKMF}"; then
 fi
 
 ## Step 2.  GNU compilers.
+## (And those C/C++ compilers claiming conformity.)
 if test "${GCC}" = yes; then
   case "${host_cpu}" in
 ## Sparc has only an 8k global object table, 1024 entries on 64-bit.
@@ -1422,8 +1406,9 @@ if test "${ac_cv_fc_compiler_gnu}" = yes; then
   esac
 fi
 ## Assume flang is the same as clang (it is a modified front end)
+## Also flang-new
 case "${FC}" in
-  *flang|flang-*)
+  *flang|*flang-new)
     fpicflags=${cpicflags}
     ;;
 esac
@@ -2152,6 +2137,8 @@ R_CHECK_FUNCS([thr_stksegment], [
 #include <thread.h>
 #include <signal.h>
 ])
+## stpcpy is POSIX 2008 (extension to C)
+AC_CHECK_FUNCS([stpcpy])
 
 ## Lots of uses of getwd(), file.access(), Sys.glob().
 ## We don't need times() except as a fallback for getrusage and
@@ -3223,6 +3210,9 @@ if test -n "${warn_browser}"; then
 fi
 if test -n "${warn_pdfviewer}"; then
   AC_MSG_WARN([${warn_pdfviewer}])
+fi
+if test "${ac_cv_sizeof_size_t}" = 4; then
+  AC_MSG_WARN([32-bit build -- this is little tested])
 fi
 
 ### Local variables: ***

@@ -175,7 +175,7 @@ extern char *tzname[2];
 #include <Defn.h>
 #include <Internal.h>
 
-Rboolean warn1902 = FALSE;
+static Rboolean warn1902 = FALSE;
 
 /* Substitute based on glibc code. */
 #include "Rstrptime.h"
@@ -1123,16 +1123,23 @@ attribute_hidden SEXP do_asPOSIXct(SEXP call, SEXP op, SEXP args, SEXP env)
 	    errno = 0;
 	    // Interface to mktime or timegm00, PATH-specific
 	    double tmp = mktime0(&tm, !isUTC);
-#ifdef MKTIME_SETS_ERRNO
-	    REAL(ans)[i] = errno ? NA_REAL : tmp + (secs - fsecs);
-#else
+/*
+    POSIX
+
+    POSIX requires that on error, mktime() returns (time_t)-1 and sets errno,
+    but previous versions of the specification made setting of errno optional.
+    errno on its own is not a reliable indication of error (PR#18532).
+*/
 	    REAL(ans)[i] = ((tmp == -1.)
+#ifdef MKTIME_SETS_ERRNO
+	                    && errno
+#else
 			    /* avoid silly gotcha at epoch minus one sec */
 			    && (tm.tm_sec != 59)
 			    && ((tm.tm_sec = 58), (mktime0(&tm, !isUTC) != -2.))
+#endif
 			    ) ?
 	      NA_REAL : tmp + (secs - fsecs);
-#endif
 	}
     }
 
@@ -1627,7 +1634,7 @@ attribute_hidden SEXP do_POSIXlt2D(SEXP call, SEXP op, SEXP args, SEXP env)
     return ans;
 }
 
-SEXP balancePOSIXlt(SEXP x, Rboolean fill_only, Rboolean do_class)
+static SEXP balancePOSIXlt(SEXP x, Rboolean fill_only, Rboolean do_class)
 {
     MAYBE_INIT_balanced
     const SEXP _filled_ = ScalarLogical(NA_LOGICAL);
